@@ -1,0 +1,10 @@
+pyproject.toml
+src/playwrite_distiller/__init__.py
+src/playwrite_distiller/distiller.py
+src/playwrite_distiller/exceptions.py
+src/playwrite_distiller/types.py
+src/playwrite_distiller.egg-info/PKG-INFO
+src/playwrite_distiller.egg-info/SOURCES.txt
+src/playwrite_distiller.egg-info/dependency_links.txt
+src/playwrite_distiller.egg-info/requires.txt
+src/playwrite_distiller.egg-info/top_level.txt
