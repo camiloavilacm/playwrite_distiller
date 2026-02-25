@@ -13,6 +13,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
+from playwright.async_api import async_playwright
+
 from .exceptions import InaccessibleWebpageError
 from .types import (
     AccessibilityStats,
@@ -38,6 +40,18 @@ async def run_accessibility_distillation(
     """
 
     effective_url = url or "https://demoqa.com/"
+
+    # Step 4: integrate Playwright navigation only (no snapshot yet).
+    # This proves we can deterministically launch a browser and reach
+    # the target URL using the async Playwright API.
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
+        await page.goto(effective_url, timeout=timeout_ms)
+        # Keep this minimal for now; later steps will:
+        # - wait for a stable state (e.g. networkidle)
+        # - capture the accessibility snapshot
+        await browser.close()
 
     stats: AccessibilityStats = AccessibilityStats(
         total_nodes=0,
