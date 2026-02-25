@@ -60,3 +60,21 @@ class SuggestionReport:
     severity: SeverityLevel
     issues: list[InteractiveElementIssue] = field(default_factory=list)
 
+
+@dataclass(slots=True)
+class DistilledResult:
+    """
+    High-level result of an accessibility distillation run.
+
+    This object is designed to be easily serialized to JSON for CI
+    artifacts and later AI analysis.
+    """
+
+    url: str
+    timestamp_utc: str
+    timeout_ms: int
+    stats: AccessibilityStats
+    suggestion_report: SuggestionReport
+    accessibility_tree: Any | None
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+

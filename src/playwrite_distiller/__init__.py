@@ -10,6 +10,7 @@ from __future__ import annotations
 from .exceptions import InaccessibleWebpageError
 from .types import (
     AccessibilityStats,
+    DistilledResult,
     InteractiveElementIssue,
     SeverityLevel,
     SuggestionReport,
@@ -17,6 +18,7 @@ from .types import (
 
 __all__: list[str] = [
     "AccessibilityStats",
+    "DistilledResult",
     "InteractiveElementIssue",
     "InaccessibleWebpageError",
     "SeverityLevel",
