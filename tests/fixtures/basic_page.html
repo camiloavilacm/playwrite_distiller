@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Playwrite Distiller Test Page</title>
+  </head>
+  <body>
+    <header>
+      <h1>Accessibility Test Page</h1>
+      <nav aria-label="Main navigation">
+        <ul>
+          <li><a href="#main">Skip to main content</a></li>
+          <li><a href="#contact">Contact</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section aria-labelledby="login-heading">
+        <h2 id="login-heading">Login</h2>
+        <form>
+          <label for="email">Email</label>
+          <input id="email" type="email" name="email" />
+
+          <label for="password">Password</label>
+          <input id="password" type="password" name="password" />
+
+          <button type="submit">Sign in</button>
+        </form>
+      </section>
+
+      <section aria-labelledby="cta-heading">
+        <h2 id="cta-heading">Call to Action</h2>
+        <button type="button">Primary action</button>
+        <!-- Intentionally unnamed button for later checks -->
+        <button type="button" aria-hidden="true"></button>
+      </section>
+    </main>
+
+    <footer id="contact">
+      <p>Contact us at <a href="mailto:test@example.com">test@example.com</a></p>
+    </footer>
+  </body>
+</html>
+

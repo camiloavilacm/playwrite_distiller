@@ -1,0 +1,14 @@
+{
+  "name": "playwrite-distiller-aria-runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimal Playwright-based runner to capture accessibility snapshots for playwrite-distiller.",
+  "scripts": {
+    "aria-snapshot": "node ./aria-snapshot-runner.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}
+

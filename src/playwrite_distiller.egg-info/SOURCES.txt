@@ -1,5 +1,7 @@
+README.md
 pyproject.toml
 src/playwrite_distiller/__init__.py
+src/playwrite_distiller/__main__.py
 src/playwrite_distiller/distiller.py
 src/playwrite_distiller/exceptions.py
 src/playwrite_distiller/types.py

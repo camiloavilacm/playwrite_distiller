@@ -1,12 +1,3 @@
-Metadata-Version: 2.4
-Name: playwrite-distiller
-Version: 0.1.0
-Summary: Deterministic Playwright-based accessibility distiller and gatekeeper.
-Requires-Python: >=3.12
-Description-Content-Type: text/markdown
-Requires-Dist: playwright>=1.58.0
-Requires-Dist: pyyaml>=6.0.3
-
 ## playwrite-distiller
 
 Deterministic accessibility "distiller" that analyzes Playwright accessibility
