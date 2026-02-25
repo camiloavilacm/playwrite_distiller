@@ -4,13 +4,11 @@ Custom exceptions for the Playwright-based accessibility distiller.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Optional
 
 from .types import AccessibilityStats, SuggestionReport
 
 
-@dataclass(slots=True)
 class InaccessibleWebpageError(Exception):
     """
     Raised when the accessibility health checks determine that a page
@@ -22,10 +20,15 @@ class InaccessibleWebpageError(Exception):
     - ``suggestion_report`` carries structured guidance for remediation.
     """
 
-    message: str
-    stats: Optional[AccessibilityStats] = None
-    suggestion_report: Optional[SuggestionReport] = None
+    def __init__(
+        self,
+        message: str,
+        stats: Optional[AccessibilityStats] = None,
+        suggestion_report: Optional[SuggestionReport] = None,
+    ) -> None:
+        super().__init__(message)
+        self.message = message
+        self.stats = stats
+        self.suggestion_report = suggestion_report
 
-    def __post_init__(self) -> None:
-        super().__init__(self.message)
 

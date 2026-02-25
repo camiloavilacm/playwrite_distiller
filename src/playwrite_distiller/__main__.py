@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from dataclasses import asdict
 
 from .distiller import run_accessibility_distillation_sync
+from .exceptions import InaccessibleWebpageError
 
 
 def _parse_args() -> argparse.Namespace:
@@ -39,13 +41,34 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = _parse_args()
-    result = run_accessibility_distillation_sync(
-        url=args.url,
-        timeout_ms=args.timeout_ms,
-    )
+    try:
+        result = run_accessibility_distillation_sync(
+            url=args.url,
+            timeout_ms=args.timeout_ms,
+        )
+    except InaccessibleWebpageError as exc:
+        # Structured JSON error output for CI and tooling.
+        payload = {
+            "status": "error",
+            "error_type": "InaccessibleWebpageError",
+            "message": exc.message,
+            "stats": asdict(exc.stats) if exc.stats is not None else None,
+            "suggestion_report": (
+                asdict(exc.suggestion_report)
+                if exc.suggestion_report is not None
+                else None
+            ),
+        }
+        print(json.dumps(payload, indent=2))
+        sys.exit(1)
+
     # DistilledResult is a dataclass containing other dataclasses,
     # so asdict() gives us a JSON-serializable structure.
-    print(json.dumps(asdict(result), indent=2))
+    payload = {
+        "status": "ok",
+        "result": asdict(result),
+    }
+    print(json.dumps(payload, indent=2))
 
 
 if __name__ == "__main__":
