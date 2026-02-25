@@ -1,8 +1,26 @@
 """
 Core package for the Playwright-based accessibility distiller.
 
-Step 1: minimal package skeleton only.
+Public surface is intentionally small and explicit so that imports in
+application code and tests remain stable as the project evolves.
 """
 
-__all__: list[str] = []
+from __future__ import annotations
+
+from .exceptions import InaccessibleWebpageError
+from .types import (
+    AccessibilityStats,
+    InteractiveElementIssue,
+    SeverityLevel,
+    SuggestionReport,
+)
+
+__all__: list[str] = [
+    "AccessibilityStats",
+    "InteractiveElementIssue",
+    "InaccessibleWebpageError",
+    "SeverityLevel",
+    "SuggestionReport",
+]
+
 
