@@ -4,8 +4,6 @@ Custom exceptions for the Playwright-based accessibility distiller.
 
 from __future__ import annotations
 
-from typing import Optional
-
 from .types import AccessibilityStats, SuggestionReport
 
 
@@ -23,8 +21,8 @@ class InaccessibleWebpageError(Exception):
     def __init__(
         self,
         message: str,
-        stats: Optional[AccessibilityStats] = None,
-        suggestion_report: Optional[SuggestionReport] = None,
+        stats: AccessibilityStats | None = None,
+        suggestion_report: SuggestionReport | None = None,
     ) -> None:
         super().__init__(message)
         self.message = message

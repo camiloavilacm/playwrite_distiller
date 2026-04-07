@@ -134,7 +134,7 @@ def main() -> None:
             snapshot_path=snapshot_path,
             timeout_ms=args.timeout_ms,
         )
-        
+
         # SUCCESS PAYLOAD
         payload = {
             "status": "ok",

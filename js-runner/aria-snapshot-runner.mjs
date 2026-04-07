@@ -101,10 +101,17 @@ async function main() {
       }
     }
 
+    let pageTitle = "Unknown";
+    try {
+      pageTitle = await page.title();
+    } catch (error) {
+      console.warn("Failed to get page title:", String(error));
+    }
+
     const payload = {
       root: accessibilityTree,
       url: targetUrl,
-      pageTitle: await page.title(),
+      pageTitle,
       capturedAt: new Date().toISOString(),
       metadata: {
         runner: "node-playwright",

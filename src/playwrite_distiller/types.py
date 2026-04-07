@@ -7,12 +7,16 @@ for deterministic CI artifacts and for downstream AI analysis.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Mapping, Optional
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
-class SeverityLevel(str, Enum):
+class SeverityLevel(StrEnum):
     """Severity level for accessibility suggestions and reports."""
 
     LOW = "low"
@@ -41,9 +45,9 @@ class InteractiveElementIssue:
 
     role: str
     description: str
-    name: Optional[str] = None
-    xpath: Optional[str] = None
-    css_selector: Optional[str] = None
+    name: str | None = None
+    xpath: str | None = None
+    css_selector: str | None = None
     raw_metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
@@ -77,4 +81,3 @@ class DistilledResult:
     suggestion_report: SuggestionReport
     accessibility_tree: Any | None
     metadata: Mapping[str, Any] = field(default_factory=dict)
-

@@ -6,68 +6,172 @@ Requires-Python: >=3.12
 Description-Content-Type: text/markdown
 Requires-Dist: playwright>=1.58.0
 Requires-Dist: pyyaml>=6.0.3
+Provides-Extra: dev
+Requires-Dist: pytest>=9.0.0; extra == "dev"
+Requires-Dist: ruff>=0.9.0; extra == "dev"
+Requires-Dist: pyright>=1.1.400; extra == "dev"
 
-## playwrite-distiller
+# playwrite-distiller
 
-Deterministic accessibility "distiller" that analyzes Playwright accessibility
-snapshots and produces a small, JSON-friendly report suitable for CI gating and
-downstream AI analysis.
+Deterministic Playwright-based accessibility distiller and gatekeeper. Captures accessibility snapshots from web pages and produces a small, JSON-friendly report suitable for CI gating and downstream AI analysis.
 
-### High-level flow
+## Features
 
-- **Node / Playwright (collection)**:
-  - `js-runner/aria-snapshot-runner.mjs` launches Chromium with Playwright.
-  - It navigates to a target URL, captures the accessibility tree via
-    `page.accessibility.snapshot()`, and writes a normalized JSON file:
-    - `root`: accessibility tree (role / name / children)
-    - `url`, `pageTitle`, `capturedAt`
-    - `metadata`: runner + timeout information
+- **ARIA Snapshot Collection**: Uses Playwright to capture the full accessibility tree from any URL
+- **Deterministic Analysis**: Computes aggregate statistics (total nodes, interactive nodes, unnamed controls)
+- **Health Checks**: Built-in validation for common accessibility issues (e.g., unnamed interactive elements)
+- **CI-Friendly Output**: Structured JSON reports with exit codes for automated gates
+- **Multiple Modes**: Works with pre-generated snapshots, Node.js runner, or legacy direct Playwright
+- **Configurable**: Customizable timeout, URL, and snapshot path options
 
-- **Python distiller (analysis)**:
-  - `src/playwrite_distiller/distiller.py` loads the JSON snapshot and computes:
-    - Aggregate stats: total nodes, interactive nodes, unnamed interactive nodes.
-    - Simple health checks with a structured `SuggestionReport`.
-  - The main entrypoints are:
-    - `run_accessibility_distillation(...)`
-    - `run_accessibility_distillation_sync(...)`
+## Installation
 
-### Running the Node snapshot runner
+### Prerequisites
 
-From the project root:
+- Python 3.12 or higher
+- Node.js 18+ (for the Node.js runner)
+
+### Python Package
+
+Install the package and its dependencies:
+
+```bash
+pip install -e .
+```
+
+Or install directly from the project root:
+
+```bash
+pip install playwright pyyaml
+pip install -e .
+```
+
+### Node.js Runner
+
+Install the Node.js dependencies for the snapshot runner:
 
 ```bash
 cd js-runner
 npm install
+```
 
-# Capture an accessibility snapshot for a URL
+## Quick Start
+
+### 1. Capture an accessibility snapshot
+
+```bash
+cd js-runner
 TARGET_URL="https://example.com" npm run aria-snapshot
 ```
 
-By default, snapshots are written under:
+Snapshots are written to `artifacts/aria-snapshots/snapshot-<timestamp>.json`.
 
-- `artifacts/aria-snapshots/snapshot-<timestamp>.json` (relative to the project root)
-
-You can override the output path with:
+### 2. Analyze the snapshot
 
 ```bash
-TARGET_URL="https://example.com" SNAPSHOT_PATH="/tmp/example-aria.json" npm run aria-snapshot
+python -m playwrite_distiller --snapshot-path artifacts/aria-snapshots/snapshot-<timestamp>.json
 ```
 
-### Running the Python distiller against a snapshot
-
-Once you have a snapshot JSON file:
+### 3. Or do both in one command
 
 ```bash
-python -m playwrite_distiller --snapshot-path artifacts/aria-snapshots/snapshot-xxxx.json
+python -m playwrite_distiller --url https://example.com --use-node-runner
 ```
 
-This prints a JSON payload like:
+## Usage Modes
+
+### Mode 1: Node.js Runner (Recommended)
+
+The Node.js runner launches Chromium with Playwright, navigates to the target URL, and captures the accessibility tree via `page.accessibility.snapshot()`.
+
+```bash
+cd js-runner
+TARGET_URL="https://example.com" npm run aria-snapshot
+```
+
+This produces a JSON file containing:
+- `root`: accessibility tree (role / name / children)
+- `url`: the analyzed URL
+- `pageTitle`: page title at capture time
+- `capturedAt`: ISO timestamp
+- `metadata`: runner and timeout information
+
+### Mode 2: Python Distiller from Snapshot File
+
+Analyze a pre-generated snapshot JSON file:
+
+```bash
+python -m playwrite_distiller --snapshot-path path/to/snapshot.json
+```
+
+This is the recommended mode for CI/CD pipelines because it decouples snapshot collection from analysis.
+
+### Mode 3: Orchestrated Node + Python
+
+Let the Python CLI invoke the Node runner automatically:
+
+```bash
+python -m playwrite_distiller --url https://example.com --use-node-runner
+```
+
+This will:
+1. Run the Node runner to generate a snapshot JSON file
+2. Feed that snapshot into the Python distiller
+3. Emit the structured JSON report
+
+### Mode 4: Legacy Direct Playwright (Best-Effort)
+
+Run the distiller without a snapshot file or Node runner:
+
+```bash
+python -m playwrite_distiller --url https://example.com
+```
+
+This mode attempts to use Python Playwright bindings directly. It is kept for developer convenience and may not work in all CI environments.
+
+## Environment Variables
+
+### Node.js Runner
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `TARGET_URL` | Target URL to analyze | `https://demoqa.com/` |
+| `SNAPSHOT_PATH` | Output path for the snapshot JSON | `artifacts/aria-snapshots/snapshot-<timestamp>.json` |
+| `TIMEOUT_MS` | Navigation timeout in milliseconds | `30000` |
+
+### Python Distiller
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `TARGET_URL` | Target URL (used with `--use-node-runner`) | `https://demoqa.com/` |
+| `SNAPSHOT_PATH` | Path to snapshot file (used with `--snapshot-path`) | None |
+| `PLAYWRITE_DISTILLER_INTERACTIVE_ROLES` | Comma-separated list of interactive roles to check | Built-in set (button, link, textbox, etc.) |
+| `PLAYWRITE_DISTILLER_LOG_LEVEL` | Logging level (DEBUG, INFO, WARNING, ERROR) | `WARNING` |
+
+## CLI Options
+
+```
+python -m playwrite_distiller [OPTIONS]
+
+Options:
+  --url TEXT              Target URL to analyze (default: https://demoqa.com/).
+  --snapshot-path TEXT   Path to a pre-generated accessibility snapshot JSON file.
+  --timeout-ms INTEGER   Navigation timeout in milliseconds (default: 30000).
+  --use-node-runner      Call the Node-based Playwright runner to capture a snapshot before analysis.
+  --help                 Show this message and exit.
+```
+
+## Output Structure
+
+On success, the distiller outputs a JSON payload:
 
 ```json
 {
   "status": "ok",
   "result": {
     "url": "https://example.com",
+    "timestamp_utc": "2024-01-15T10:30:00.000000+00:00",
+    "timeout_ms": 30000,
     "stats": {
       "total_nodes": 42,
       "interactive_nodes": 10,
@@ -75,7 +179,7 @@ This prints a JSON payload like:
       "unnamed_interactive_ratio": 0.1
     },
     "suggestion_report": {
-      "summary": "...",
+      "summary": "Accessibility analysis completed from ARIA snapshot and basic health checks passed.",
       "severity": "low",
       "issues": []
     },
@@ -88,27 +192,138 @@ This prints a JSON payload like:
 }
 ```
 
-### Orchestrating Node + Python from the CLI
+On error (e.g., accessibility violations detected):
 
-You can also let the Python CLI invoke the Node runner for you:
-
-```bash
-python -m playwrite_distiller \
-  --url https://example.com \
-  --use-node-runner
+```json
+{
+  "status": "error",
+  "error_type": "InaccessibleWebpageError",
+  "message": "Too many unnamed interactive elements on 'https://example.com' (ratio=0.75).",
+  "stats": {
+    "total_nodes": 20,
+    "interactive_nodes": 8,
+    "unnamed_interactive_nodes": 6,
+    "unnamed_interactive_ratio": 0.75
+  },
+  "suggestion_report": {
+    "summary": "A large proportion of interactive controls (links, buttons, inputs) appear without accessible names. Add aria-label, aria-labelledby, or visible text labels as appropriate.",
+    "severity": "high",
+    "issues": []
+  }
+}
 ```
 
-This will:
+### Output Fields
 
-- Run the Node runner under `js-runner/` to generate a snapshot JSON file.
-- Feed that snapshot into the Python distiller.
-- Emit the usual structured JSON report (and non-zero exit code on failure).
+| Field | Description |
+|-------|-------------|
+| `status` | `"ok"` on success, `"error"` on failure |
+| `result.url` | The analyzed URL |
+| `result.timestamp_utc` | ISO timestamp of analysis |
+| `result.stats.total_nodes` | Total number of nodes in the accessibility tree |
+| `result.stats.interactive_nodes` | Count of interactive elements (buttons, links, inputs, etc.) |
+| `result.stats.unnamed_interactive_nodes` | Interactive elements without accessible names |
+| `result.stats.unnamed_interactive_ratio` | Ratio of unnamed to total interactive elements |
+| `result.suggestion_report.summary` | Human-readable summary of findings |
+| `result.suggestion_report.severity` | Severity level: `"low"`, `"medium"`, or `"high"` |
+| `result.suggestion_report.issues` | List of specific issues found (currently empty, extensible) |
+| `result.metadata` | Implementation details and runner information |
 
-### Legacy direct Playwright mode
+## CI/CD Integration
 
-If you call the distiller without `--snapshot-path` and without
-`--use-node-runner`, it will attempt to use the Python Playwright bindings to
-call `page.accessibility.snapshot()` directly. This mode is considered
-**best-effort only**, is kept for developer convenience, and may not work in
-all CI environments.
+The distiller is designed for CI gating. Exit codes:
 
+- **0**: Success (accessibility checks passed)
+- **1**: Error (accessibility violations detected or execution failed)
+
+### Example: GitHub Actions
+
+```yaml
+- name: Run accessibility distiller
+  run: |
+    python -m playwrite_distiller --url ${{ env.TARGET_URL }} --use-node-runner
+```
+
+### Example: GitLab CI
+
+```yaml
+accessibility-check:
+  script:
+    - python -m playwrite_distiller --url "$TARGET_URL" --use-node-runner
+```
+
+## Troubleshooting
+
+### "playwright.async_api is not available"
+
+The Python Playwright package is not installed. Install it:
+
+```bash
+pip install playwright
+playwright install chromium
+```
+
+### "Failed to execute Node runner"
+
+Node.js is not installed or not on PATH. Ensure Node.js 18+ is available:
+
+```bash
+node --version
+```
+
+### "Minimal accessibility tree detected"
+
+The page has very few accessibility nodes, suggesting:
+- The page loaded but the accessibility API couldn't capture content
+- The page uses heavy client-side rendering that completed after the snapshot
+- A network or JavaScript error prevented full rendering
+
+Try increasing the timeout or checking the page directly in a browser.
+
+### "Too many unnamed interactive elements"
+
+The page has interactive controls (buttons, links, inputs) without accessible names. This is a gating failure. Fix by:
+
+- Adding `aria-label` or `aria-labelledby` attributes
+- Adding visible text labels
+- Using semantic HTML elements with text content
+
+### Snapshot file not found
+
+Ensure the path is correct and the file exists:
+
+```bash
+ls -la artifacts/aria-snapshots/
+```
+
+### Permission denied errors
+
+Ensure the `artifacts/` directory is writable, or set `SNAPSHOT_PATH` to a writable location.
+
+## Type Checking
+
+This project uses [Pyright](https://github.com/microsoft/pyright) for static type checking. Run the type checker:
+
+```bash
+pyright src/playwrite_distiller/
+```
+
+Or with the configured settings:
+
+```bash
+pyright .
+```
+
+## Help Output
+
+```
+$ python -m playwrite_distiller --help
+Run the Playwright accessibility distiller.
+
+Options:
+  --url TEXT              Target URL to analyze (default: https://demoqa.com/).
+  --snapshot-path TEXT   Path to a pre-generated accessibility snapshot JSON file.
+  --timeout-ms INTEGER   Navigation timeout in milliseconds (default: 30000).
+  --use-node-runner      Call the Node-based Playwright runner to capture a snapshot before analysis.
+  --help                 Show this message and exit.
+```

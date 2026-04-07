@@ -17,23 +17,40 @@ Legacy / best-effort mode:
 from __future__ import annotations
 
 import asyncio
-import logging
 import json
-import yaml
-from datetime import datetime, timezone
+import logging
+from collections.abc import Mapping
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any
+
+import yaml
 
 from .exceptions import InaccessibleWebpageError
 from .types import (
     AccessibilityStats,
     DistilledResult,
+    InteractiveElementIssue,
     SeverityLevel,
     SuggestionReport,
 )
 
-
 LOGGER = logging.getLogger(__name__)
+
+
+def configure_logging(level: str | None = None) -> None:
+    """Configure logging based on environment or explicit level."""
+    import os
+
+    log_level = level or os.environ.get("PLAYWRITE_DISTILLER_LOG_LEVEL", "WARNING")
+    numeric_level = getattr(logging, log_level.upper(), logging.WARNING)
+    logging.basicConfig(
+        level=numeric_level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+
+
+configure_logging()
 
 # Very small, explicit thresholds for early health checks.
 MIN_TOTAL_NODES = 3
@@ -60,10 +77,48 @@ INTERACTIVE_ROLES = {
     "treeitem",
 }
 
+FORM_ROLES = {
+    "textbox",
+    "searchbox",
+    "combobox",
+    "checkbox",
+    "radio",
+    "switch",
+    "slider",
+    "spinbutton",
+}
+
+INVALID_ARIA_ROLES = {
+    "banner",
+    "contentinfo",
+    "navigation",
+    "complementary",
+    "main",
+    "region",
+}
+
+IMAGE_ROLES = {"img", "image"}
+
+
+def get_interactive_roles() -> set[str]:
+    """Get the set of interactive roles. Can be overridden via environment variable."""
+    import os
+
+    env_roles = os.environ.get("PLAYWRITE_DISTILLER_INTERACTIVE_ROLES")
+    if env_roles:
+        return {role.strip() for role in env_roles.split(",") if role.strip()}
+    return INTERACTIVE_ROLES.copy()
+
+
+def set_interactive_roles(roles: set[str]) -> None:
+    """Set custom interactive roles (for testing or configuration)."""
+    global INTERACTIVE_ROLES
+    INTERACTIVE_ROLES = roles
+
 
 def _load_aria_snapshot_from_file(
     snapshot_path: str,
-) -> Tuple[Any | None, Mapping[str, Any]]:
+) -> tuple[Any | None, Mapping[str, Any]]:
     """
     Load an ARIA accessibility snapshot from a JSON file.
 
@@ -79,9 +134,7 @@ def _load_aria_snapshot_from_file(
 
     if isinstance(raw, dict) and "root" in raw:
         tree = raw.get("root")
-        metadata: Dict[str, Any] = {
-            key: value for key, value in raw.items() if key != "root"
-        }
+        metadata: dict[str, Any] = {key: value for key, value in raw.items() if key != "root"}
     else:
         tree = raw
         metadata = {}
@@ -89,54 +142,65 @@ def _load_aria_snapshot_from_file(
     return tree, metadata
 
 
-def _compute_accessibility_stats(tree: Any | None) -> AccessibilityStats:
+def _compute_accessibility_stats(
+    tree: Any | None,
+) -> tuple[AccessibilityStats, list[InteractiveElementIssue]]:
     """
     Traverse the ARIA snapshot (YAML-parsed dict/list/str) to derive stats.
     Compatible with modern Playwright aria_snapshot() outputs.
+
+    Returns a tuple of (stats, issues) where issues contains specific
+    problematic elements found during traversal.
     """
     if isinstance(tree, str):
         try:
-            # Converts the YAML string into a Python object structure
             tree = yaml.safe_load(tree)
         except Exception as exc:
             LOGGER.error("Failed to parse ARIA YAML: %s", exc)
             tree = None
 
     if not tree:
-        return AccessibilityStats(
-            total_nodes=0,
-            interactive_nodes=0,
-            unnamed_interactive_nodes=0,
-            unnamed_interactive_ratio=0.0,
+        return (
+            AccessibilityStats(
+                total_nodes=0,
+                interactive_nodes=0,
+                unnamed_interactive_nodes=0,
+                unnamed_interactive_ratio=0.0,
+            ),
+            [],
         )
 
-    def _walk(node: Any) -> Tuple[int, int, int]:
+    issues: list[InteractiveElementIssue] = []
+
+    def _walk(node: Any) -> tuple[int, int, int]:
+        nonlocal issues
         total = 0
         interactive = 0
         unnamed_interactive = 0
 
-        # Case 1: Dictionary - Key is usually the 'Role "Name"'
         if isinstance(node, dict):
             total += 1
             for key, value in node.items():
-                # Extract the role (e.g., 'button "Submit"' -> 'button')
                 role_name = key.split()[0] if isinstance(key, str) else ""
-                
-                if role_name in INTERACTIVE_ROLES:
+
+                if role_name in get_interactive_roles():
                     interactive = 1
-                    # In YAML, if there's no name, the value is often an empty list or None
-                    # If the key is just 'button' without a quoted name, check the value
                     has_name = '"' in key or (isinstance(value, str) and value.strip())
                     if not has_name:
                         unnamed_interactive = 1
+                        issues.append(
+                            InteractiveElementIssue(
+                                role=role_name,
+                                description=f"Interactive element '{role_name}' without accessible name",
+                                name=None,
+                            )
+                        )
 
-                # Recursively walk children (the value of the dict)
                 c_total, c_inter, c_unnamed = _walk(value)
                 total += c_total
                 interactive += c_inter
                 unnamed_interactive += c_unnamed
 
-        # Case 2: List - Represents a collection of sibling nodes
         elif isinstance(node, list):
             for item in node:
                 c_total, c_inter, c_unnamed = _walk(item)
@@ -144,45 +208,54 @@ def _compute_accessibility_stats(tree: Any | None) -> AccessibilityStats:
                 interactive += c_inter
                 unnamed_interactive += c_unnamed
 
-        # Case 3: String - Usually a text node or a simplified leaf node
         elif isinstance(node, str):
             total += 1
-            # Check if the string itself represents a role (e.g., "- button")
             role_name = node.split()[0]
             if role_name in INTERACTIVE_ROLES:
                 interactive = 1
-                if '"' not in node: # No quoted name found in the string
+                if '"' not in node:
                     unnamed_interactive = 1
+                    issues.append(
+                        InteractiveElementIssue(
+                            role=role_name,
+                            description=f"Interactive element '{role_name}' without accessible name",
+                            name=None,
+                        )
+                    )
 
         return total, interactive, unnamed_interactive
 
     total_nodes, interactive_nodes, unnamed_interactive_nodes = _walk(tree)
 
-    unnamed_ratio = (
-        unnamed_interactive_nodes / interactive_nodes if interactive_nodes else 0.0
+    unnamed_ratio = unnamed_interactive_nodes / interactive_nodes if interactive_nodes else 0.0
+
+    return (
+        AccessibilityStats(
+            total_nodes=total_nodes,
+            interactive_nodes=interactive_nodes,
+            unnamed_interactive_nodes=unnamed_interactive_nodes,
+            unnamed_interactive_ratio=unnamed_ratio,
+        ),
+        issues,
     )
 
-    return AccessibilityStats(
-        total_nodes=total_nodes,
-        interactive_nodes=interactive_nodes,
-        unnamed_interactive_nodes=unnamed_interactive_nodes,
-        unnamed_interactive_ratio=unnamed_ratio,
-    )
 
 def _run_health_checks(
     stats: AccessibilityStats,
     url: str,
+    issues: list[InteractiveElementIssue] | None = None,
 ) -> bool:
     """
     Apply simple, deterministic health checks.
 
-    Step 6b keeps this intentionally small:
     - Empty / trivial trees (very few nodes) are treated as problematic.
     - Extreme unnamed interactive ratio is also treated as failure.
-    For now, empty / trivial trees are logged as a warning (partial
-    analysis) instead of a hard failure, to better support restricted
-    environments where the accessibility API is unavailable.
+    - Form controls without accessible names.
+    - Invalid ARIA role usage on interactive elements.
     """
+
+    if issues is None:
+        issues = []
 
     # Trivial tree: effectively nothing in the accessibility snapshot.
     if stats.total_nodes < MIN_TOTAL_NODES:
@@ -212,7 +285,7 @@ def _run_health_checks(
                     "aria-labelledby, or visible text labels as appropriate."
                 ),
                 severity=SeverityLevel.HIGH,
-                issues=[],
+                issues=issues,
             ),
         )
 
@@ -220,8 +293,8 @@ def _run_health_checks(
 
 
 async def run_accessibility_distillation(
-    url: Optional[str] = None,
-    snapshot_path: Optional[str] = None,
+    url: str | None = None,
+    snapshot_path: str | None = None,
     timeout_ms: int = 30_000,
 ) -> DistilledResult:
     """
@@ -250,8 +323,10 @@ async def run_accessibility_distillation(
         effective_url = url or str(snapshot_metadata.get("url") or "about:blank")
 
         # Derive statistics and health checks from the loaded tree.
-        stats: AccessibilityStats = _compute_accessibility_stats(accessibility_tree)
-        passed_checks = _run_health_checks(stats=stats, url=effective_url)
+        stats: AccessibilityStats
+        issues: list[InteractiveElementIssue]
+        stats, issues = _compute_accessibility_stats(accessibility_tree)
+        passed_checks = _run_health_checks(stats=stats, url=effective_url, issues=issues)
 
         if passed_checks:
             summary = (
@@ -270,10 +345,10 @@ async def run_accessibility_distillation(
         suggestion_report: SuggestionReport = SuggestionReport(
             summary=summary,
             severity=severity,
-            issues=[],
+            issues=issues,
         )
 
-        metadata: Dict[str, Any] = {
+        metadata: dict[str, Any] = {
             "implementation": "aria_snapshot_json",
             "version": "0.1.0",
         }
@@ -282,7 +357,7 @@ async def run_accessibility_distillation(
 
         return DistilledResult(
             url=effective_url,
-            timestamp_utc=datetime.now(timezone.utc).isoformat(),
+            timestamp_utc=datetime.now(UTC).isoformat(),
             timeout_ms=timeout_ms,
             stats=stats,
             suggestion_report=suggestion_report,
@@ -313,8 +388,9 @@ async def run_accessibility_distillation(
             "accessibility snapshot directly. Returning a partial analysis "
             "with an empty accessibility tree."
         )
-        stats = _compute_accessibility_stats(None)
-        passed_checks = _run_health_checks(stats=stats, url=effective_url)
+        stats, _ = _compute_accessibility_stats(None)
+        empty_issues: list[InteractiveElementIssue] = []
+        passed_checks = _run_health_checks(stats=stats, url=effective_url, issues=empty_issues)
 
         if passed_checks:
             summary = (
@@ -338,7 +414,7 @@ async def run_accessibility_distillation(
 
         return DistilledResult(
             url=effective_url,
-            timestamp_utc=datetime.now(timezone.utc).isoformat(),
+            timestamp_utc=datetime.now(UTC).isoformat(),
             timeout_ms=timeout_ms,
             stats=stats,
             suggestion_report=suggestion_report,
@@ -362,11 +438,11 @@ async def run_accessibility_distillation(
                 LOGGER.warning("Failed to capture aria_snapshot: %s", exc)
         else:
             LOGGER.error("Environment version too old for aria_snapshot.")
-            
+
         await browser.close()
 
     # Derive statistics and apply health checks using the captured tree.
-    stats = _compute_accessibility_stats(accessibility_tree)
+    stats, issues = _compute_accessibility_stats(accessibility_tree)
     passed_checks = _run_health_checks(stats=stats, url=effective_url)
 
     if passed_checks:
@@ -386,12 +462,12 @@ async def run_accessibility_distillation(
     suggestion_report = SuggestionReport(
         summary=summary,
         severity=severity,
-        issues=[],
+        issues=issues,
     )
 
     return DistilledResult(
         url=effective_url,
-        timestamp_utc=datetime.now(timezone.utc).isoformat(),
+        timestamp_utc=datetime.now(UTC).isoformat(),
         timeout_ms=timeout_ms,
         stats=stats,
         suggestion_report=suggestion_report,
@@ -404,8 +480,8 @@ async def run_accessibility_distillation(
 
 
 def run_accessibility_distillation_sync(
-    url: Optional[str] = None,
-    snapshot_path: Optional[str] = None,
+    url: str | None = None,
+    snapshot_path: str | None = None,
     timeout_ms: int = 30_000,
 ) -> DistilledResult:
     """
@@ -426,4 +502,3 @@ def run_accessibility_distillation_sync(
     except InaccessibleWebpageError:
         # Re-raise unchanged for callers that specifically want to catch it.
         raise
-

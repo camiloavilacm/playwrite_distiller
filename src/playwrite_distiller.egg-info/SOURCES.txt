@@ -10,3 +10,4 @@ src/playwrite_distiller.egg-info/SOURCES.txt
 src/playwrite_distiller.egg-info/dependency_links.txt
 src/playwrite_distiller.egg-info/requires.txt
 src/playwrite_distiller.egg-info/top_level.txt
+tests/test_distiller.py
