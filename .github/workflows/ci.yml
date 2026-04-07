@@ -25,12 +25,14 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+        with:
+          enable-python-patches: true
 
       - name: Install dependencies
-        run: uv pip install --dev pytest
+        run: uv pip install -e ".[dev]" --system
 
       - name: Run pytest
-        run: uv run pytest tests/
+        run: pytest tests/
 
   typecheck:
     name: Type Check
@@ -46,12 +48,14 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+        with:
+          enable-python-patches: true
 
       - name: Install dependencies
-        run: uv pip install --dev pyright
+        run: uv pip install -e ".[dev]" --system
 
       - name: Run pyright
-        run: uv run pyright src/playwrite_distiller/
+        run: pyright src/playwrite_distiller/
 
   lint:
     name: Lint
@@ -67,12 +71,14 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+        with:
+          enable-python-patches: true
 
       - name: Install dependencies
-        run: uv pip install --dev ruff
+        run: uv pip install -e ".[dev]" --system
 
       - name: Run ruff
-        run: uv run ruff check src/
+        run: ruff check src/
 
   build:
     name: Build Package
@@ -88,14 +94,16 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+        with:
+          enable-python-patches: true
 
       - name: Install build dependencies
-        run: uv pip install build
+        run: uv pip install build --system
 
       - name: Build package
-        run: uv run python -m build
+        run: python -m build
 
       - name: Verify package
         run: |
-          uv pip install dist/*.whl
+          uv pip install dist/*.whl --system
           python -c "import playwrite_distiller; print('Package imported successfully')"
