@@ -125,41 +125,45 @@ def main() -> None:
             print(json.dumps(error_payload, indent=2))
             sys.exit(1)
 
-    # ------------------------------------------------------------------
-    # Run the Python distiller against either a snapshot file or (legacy)
-    # via direct Playwright integration.
-    # ------------------------------------------------------------------
     try:
+        # ------------------------------------------------------------------
+        # Run the Python distiller
+        # ------------------------------------------------------------------
         result = run_accessibility_distillation_sync(
             url=args.url,
             snapshot_path=snapshot_path,
             timeout_ms=args.timeout_ms,
         )
+        
+        # SUCCESS PAYLOAD
+        payload = {
+            "status": "ok",
+            "result": asdict(result),
+        }
+        print(json.dumps(payload, indent=2))
+        sys.exit(0) # Explicitly exit 0 on success
+
     except InaccessibleWebpageError as exc:
-        # Structured JSON error output for CI and tooling.
+        # Step 8 Requirement: Exit code 1 + Structured JSON
         payload = {
             "status": "error",
             "error_type": "InaccessibleWebpageError",
-            "message": exc.message,
-            "stats": asdict(exc.stats) if exc.stats is not None else None,
-            "suggestion_report": (
-                asdict(exc.suggestion_report)
-                if exc.suggestion_report is not None
-                else None
-            ),
+            "message": str(exc), # Use str(exc) to get the clean error message
+            "stats": asdict(exc.stats) if exc.stats else None,
+            "suggestion_report": asdict(exc.suggestion_report) if exc.suggestion_report else None,
         }
-        print(json.dumps(payload, indent=2))
+        print(json.dumps(payload, indent=2), file=sys.stderr)
         sys.exit(1)
 
-    # DistilledResult is a dataclass containing other dataclasses,
-    # so asdict() gives us a JSON-serializable structure.
-    payload = {
-        "status": "ok",
-        "result": asdict(result),
-    }
-    print(json.dumps(payload, indent=2))
-
+    except Exception as exc:
+        # CATCH-ALL: Prevents raw tracebacks from breaking CI pipes
+        payload = {
+            "status": "error",
+            "error_type": type(exc).__name__,
+            "message": str(exc),
+        }
+        print(json.dumps(payload, indent=2), file=sys.stderr)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
-

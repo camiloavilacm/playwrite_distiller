@@ -1,0 +1,18 @@
+# Project Rules & Context
+
+## Tech Stack & Architecture
+- [Insert your primary languages/frameworks here, e.g., Next.js, FastAPI]
+- [Insert your architectural patterns, e.g., Hexagonal, MVC]
+
+## Coding Standards (Migrated from .cursorrules)
+- Use functional components with TypeScript.
+- Always include JSDoc comments for exported functions.
+- Prefer Tailwind CSS for styling; avoid inline styles.
+
+## Cascade & Agent Behavior
+- Always run `npm run lint` after modifying files.
+- Before a large refactor, explain the plan in the chat.
+- When creating new components, always place them in `/components/ui`.
+
+## Memories & Persistent Context
+- [Add any specific business logic or "gotchas" the AI should never forget]
